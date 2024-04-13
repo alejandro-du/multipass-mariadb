@@ -20,19 +20,14 @@ sudo apt install mariadb-server -y
 # Remove test database and access to it? [Y/n] y
 # Reload privilege tables now? [Y/n] y
 # Note: In shells, you must escape the exclamation mark character in strings.
-echo -e "RootPassword123\!\nn\nyour_root_password\nyour_root_password\nn\ny\nn\ny\ny" | sudo mariadb-secure-installation
+echo -e "\ny\ny\nRootPassword123\!\nRootPassword123\!\ny\ny\ny\ny\n" | sudo mariadb-secure-installation
 
 # Configure MariaDB for remote access, set a random server id, and enable the binary log:
 server_id=$(shuf -i 1-100000 -n 1)
-printf "[mariadbd]\nbind-address = 0.0.0.0\nserver_id = $server_id\nlog_bin = mariadb-bin.log" | sudo tee /etc/mysql/mariadb.conf.d/99-custom-settings.cnf > /dev/null
+printf "[mariadbd]\nbind-address = 0.0.0.0\nserver_id = $server_id\nlog_bin = mariadb-bin.log\nbinlog_format = mixed\ngtid_strict_mode = 1\nlog_slave_updates = 1\nskip_name_resolve = 1" | sudo tee /etc/mysql/mariadb.conf.d/99-custom-settings.cnf > /dev/null
 sudo systemctl restart mariadb.service
 
 if [[ $(hostname) == *1 ]]; then
-	# Create a database (schema) and user for your application:
-	sudo mariadb -e "CREATE DATABASE demo"
-	sudo mariadb -e "CREATE USER 'user'@'%' IDENTIFIED BY 'Password123\!'"
-	sudo mariadb -e "GRANT ALL PRIVILEGES ON demo.* TO 'user'@'%'"
-
 	# Create a user for MaxScale:
 	sudo mariadb -e "CREATE USER 'maxscale'@'%' IDENTIFIED BY 'MaxScale123\!';"
 	sudo mariadb -e "GRANT SELECT ON mysql.user TO 'maxscale'@'%'"
@@ -43,10 +38,10 @@ if [[ $(hostname) == *1 ]]; then
 	sudo mariadb -e "GRANT SELECT ON mysql.proxies_priv TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT SELECT ON mysql.roles_mapping TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT SHOW DATABASES ON *.* TO 'maxscale'@'%'"
-	sudo mariadb -e "GRANT SLAVE MONITOR ON *.* TO 'maxscale'@'%'"
-	sudo mariadb -e "GRANT REPLICATION SLAVE ADMIN ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT REPLICA MONITOR ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT REPLICATION REPLICA ADMIN ON *.* TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT REPLICATION MASTER ADMIN ON *.* TO 'maxscale'@'%'"
-	sudo mariadb -e "GRANT REPLICATION SLAVE ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT REPLICATION REPLICA ON *.* TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT SHOW DATABASES ON *.* TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT RELOAD ON *.* TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT READ_ONLY ADMIN ON *.* TO 'maxscale'@'%'"
@@ -54,10 +49,17 @@ if [[ $(hostname) == *1 ]]; then
 
 	# Create a replication user:
 	sudo mariadb -e "CREATE USER 'replication'@'%' IDENTIFIED BY 'Replication123\!'"
-	sudo mariadb -e "GRANT REPLICATION SLAVE ON *.* TO 'replication'@'%'"
+	sudo mariadb -e "GRANT REPLICATION REPLICA ON *.* TO 'replication'@'%'"
+
+	# Create a database (schema) and user for your application:
+	sudo mariadb -e "CREATE DATABASE demo"
+	sudo mariadb -e "CREATE USER 'user'@'%' IDENTIFIED BY 'Password123\!'"
+	sudo mariadb -e "GRANT ALL PRIVILEGES ON demo.* TO 'user'@'%'"
 else
-	# get ip address of mariadb-server-1
+	# Replicate from mariadb-server-1:
 	master_ip=$(getent hosts mariadb-server-1.local | awk '{ print $1 }')
-	sudo mariadb -e "CHANGE MASTER TO MASTER_HOST='$master_ip', MASTER_USER='replication', MASTER_PASSWORD='Replication123\!', MASTER_LOG_FILE='mariadb-bin.000001', MASTER_LOG_POS=344, MASTER_USE_GTID=replica_pos"
-	sudo mariadb -e "START SLAVE"
+	sudo mariadb -e "RESET MASTER"
+	sudo mariadb -e "SET GLOBAL gtid_slave_pos = ''"
+	sudo mariadb -e "CHANGE MASTER TO MASTER_HOST='$master_ip', MASTER_USER='replication', MASTER_PASSWORD='Replication123\!', MASTER_USE_GTID=current_pos"
+	sudo mariadb -e "START REPLICA"
 fi
