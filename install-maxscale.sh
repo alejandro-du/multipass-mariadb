@@ -1,5 +1,7 @@
 # Install Avahi daemon for accessing the server by hostname:
 sudo apt install avahi-daemon -y
+sudo systemctl start avahi-daemon
+sudo systemctl enable avahi-daemon
 
 # Install the latest version of MariaDB MaxScale:
 wget https://r.mariadb.com/downloads/mariadb_repo_setup

@@ -1,5 +1,7 @@
 # Install Avahi daemon for accessing the server by hostname:
 sudo apt install avahi-daemon -y
+sudo systemctl start avahi-daemon
+sudo systemctl enable avahi-daemon
 
 # Install the latest version of MariaDB:
 wget https://r.mariadb.com/downloads/mariadb_repo_setup
@@ -42,6 +44,13 @@ if [[ $(hostname) == *1 ]]; then
 	sudo mariadb -e "GRANT SELECT ON mysql.roles_mapping TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT SHOW DATABASES ON *.* TO 'maxscale'@'%'"
 	sudo mariadb -e "GRANT SLAVE MONITOR ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT REPLICATION SLAVE ADMIN ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT REPLICATION MASTER ADMIN ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT REPLICATION SLAVE ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT SHOW DATABASES ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT RELOAD ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT READ_ONLY ADMIN ON *.* TO 'maxscale'@'%'"
+	sudo mariadb -e "GRANT BINLOG ADMIN ON *.* TO 'maxscale'@'%'"
 
 	# Create a replication user:
 	sudo mariadb -e "CREATE USER 'replication'@'%' IDENTIFIED BY 'Replication123\!'"
@@ -49,6 +58,6 @@ if [[ $(hostname) == *1 ]]; then
 else
 	# get ip address of mariadb-server-1
 	master_ip=$(getent hosts mariadb-server-1.local | awk '{ print $1 }')
-	sudo mariadb -e "CHANGE MASTER TO MASTER_HOST='$master_ip', MASTER_USER='replication', MASTER_PASSWORD='Replication123\!', MASTER_LOG_POS=344, MASTER_USE_GTID=replica_pos"
+	sudo mariadb -e "CHANGE MASTER TO MASTER_HOST='$master_ip', MASTER_USER='replication', MASTER_PASSWORD='Replication123\!', MASTER_LOG_FILE='mariadb-bin.000001', MASTER_LOG_POS=344, MASTER_USE_GTID=replica_pos"
 	sudo mariadb -e "START SLAVE"
 fi
